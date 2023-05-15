@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NestJS PDF App</title>
+  <style>
+    #pdfContainer {
+      height: 800px;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+</head>
+
+<body>
+  <h1>NestJS PDF App</h1>
+  <button id="load-pdf">Load PDF</button>
+  <button id="save-pdf">Save PDF</button>
+  <br />
+  <br />
+  <div id="pdfContainer"></div>
+  <script>
+    let modifiedPDFData;
+    const loadPDFButton = document.getElementById('load-pdf');
+    const savePDFButton = document.getElementById('save-pdf');
+    // const pdfViewer = document.getElementById('pdf-viewer');
+    const serverURL = 'http://localhost:3000';
+
+    async function loadPDF() {
+      const response = await fetch(`${serverURL}/pdf/display`);
+      const data = await response.json();
+      console.log(data, "res..")
+
+      const pdfContainer = document.getElementById("pdfContainer");
+      const pdfData = data.data;
+
+      const objectElement = document.createElement("object");
+      objectElement.setAttribute("data", `data:application/pdf;base64,${pdfData}`);
+      objectElement.setAttribute("type", "application/pdf");
+      objectElement.setAttribute("width", "100%");
+      objectElement.setAttribute("height", "100%");
+
+      const pElement = document.createElement("p");
+      pElement.textContent = "This browser does not support inline PDFs. Please download the PDF to view it: ";
+      const aElement = document.createElement("a");
+      aElement.setAttribute("href", `data:application/pdf;base64,${pdfData}`);
+      aElement.textContent = "Download PDF";
+
+      pElement.appendChild(aElement);
+      objectElement.appendChild(pElement);
+
+      pdfContainer.appendChild(objectElement);
+
+      objectElement.addEventListener("load", function () {
+        const pdfWindow = objectElement.contentWindow;
+        pdfWindow.postMessage({ type: 'modifiedPDFData' }, '*');
+      });
+    }
+
+    function handlePDFEvent(event) {
+      if (event.origin !== 'http://localhost:3000') {
+        // Ignore messages from unexpected origins
+        return;
+      }
+
+      if (event.data.type === 'modifiedPDFData') {
+        modifiedPDFData = event.data.data;
+      }
+    }
+
+    function submitPDF() {
+      console.log(modifiedPDFData, "mod..")
+      if (!modifiedPDFData) {
+        console.error('No modified PDF data available');
+        return;
+      }
+
+      const modifiedPdfBytes = modifiedPDFData.output();
+
+      const modifiedPdfBase64 = arrayBufferToBase64(modifiedPdfBytes);
+
+      fetch('/pdf/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: modifiedPdfBase64 }),
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log(data);
+        })
+        .catch(error => {
+          console.error(error);
+        });
+    }
+
+    function arrayBufferToBase64(buffer) {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return window.btoa(binary);
+    }
+
+    loadPDFButton.addEventListener('click', loadPDF);
+    savePDFButton.addEventListener('click', submitPDF);
+    window.addEventListener('message', handlePDFEvent);
+  </script>
+</body>
+
+</html>
